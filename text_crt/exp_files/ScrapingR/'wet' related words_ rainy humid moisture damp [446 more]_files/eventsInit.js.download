@@ -1,0 +1,92 @@
+qs('#query').addEventListener('focus', function() {
+  this.selectionStart = this.selectionEnd = this.value.length;
+});
+
+var scrollTopButtonIsVisible = false;
+qs('button.scroll-to-top').addEventListener('click', function() {
+  ScrollToPlugin.scrollVerticalToElement('body', 0, function() {
+    scrollTopButtonIsVisible = false;
+    fadeOut( qs('button.scroll-to-top') );
+    qs('#query').focus();
+    //qs('#query').select();
+  });
+});
+
+window.addEventListener('scroll', function() {
+  if(window.scrollY > getOffsetTop(qs("#query"))) {
+    if(!scrollTopButtonIsVisible) {
+      fadeIn( qs('button.scroll-to-top') );
+      scrollTopButtonIsVisible = true;
+    }
+  } else {
+    if(scrollTopButtonIsVisible) {
+      scrollTopButtonIsVisible = false;
+      fadeOut( qs('button.scroll-to-top') );
+    }
+  }
+});
+
+
+// Search form "enter" press:
+qs("#query").addEventListener("keyup", function(e) {
+
+  hideAllPopups();
+
+  if(e.which === 13) {
+    if(qs('#query') !== "") executeSearch();
+  }
+
+  if(e.target.value === "") {
+    qs("#clear-search-button").style.display = "none";
+  } else {
+    qs("#clear-search-button").style.display = "block";
+  }
+
+});
+qs("#clear-search-button").addEventListener("click", clearSearch)
+
+
+// prevent touchscreen drag from driggering definition popups
+// qs("#main").addEventListener("touchstart", function(e) {
+//   e.stopPropagation();
+//   e.preventDefault();
+//   return false;
+// })
+
+history.onpopstate = window.onpopstate = function() {
+  handlePageLoad();
+}
+
+
+
+document.addEventListener("click", function(e) {
+  if( !hasClassInTree(e.srcElement, 'drop') ) {
+    destroyAllPopups();
+  }
+});
+
+
+function hasClass(element, className) {
+  return element.className.match(new RegExp('(\\s|^)' + className + '(\\s|$)'));
+}
+function parentByClass(childElement, className) {
+    if (!childElement) {
+        return null;
+    } else {
+        if (childElement === document) {
+          return null;
+        } else if (hasClass(childElement, className)) {
+            return childElement;
+        } else {
+            return parentByClass(childElement.parentNode, className)
+        }
+    }
+}
+function hasClassInTree(element, className) {
+    return hasClass(element, className) || parentByClass(element, className)
+}
+
+
+
+// trying to fix scroll-memory behaviour:
+window.addEventListener("unload", function(){ window.scrollTo(0,0); });

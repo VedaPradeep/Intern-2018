@@ -1,0 +1,285 @@
+
+var homepageTitle = document.title;
+var popularSearches = ["skiing","coffee","space","fishing","music","energy","fire","forest","psychology","time","art","accessories","archeology","autumn","australia","alcohol","animals","aviation","aboriginal","astronomy","belonging","beach","beauty","buildings","business","biology","books","birds","bees","babies","crime","culture","computers","camping","cooking","crafts","cube","circus","christmas","dance","desert","design","democracy","death","dogs","drama","discovery","dragons","dream","electricity","easter","entertainment","emotions","english","education","engineering","egypt","elephants","fashion","food","fitness","family","film","flowers","flying","ghost","geography","government","gold","games","galaxy","green","gym","gardening","god","health","history","home","horse","harmony","hair","health and fitness","heart","horror","happiness","india","identity","ice","in the north","italy","immigration","insects","ink","island","islam","journey","japan","justice","jewellery","jungle","job","journalism","jewelry","jail","james bond","knights","kitchen","king","knowledge","kingdom","kangaroo","kite","kindness","knitting","karate","love","light","lent","literature","life","law","language","landscape","lifestyle","lion","money","makeup","movies","mammals","magic","moon","mental health","memory","nature","nutrition","north","natural disasters","night","north pole","numbers","not belonging","news","nostalgia","ocean","office","oxfords","orange","outer space","owls","oil","old","organic","orchestra","party","photography","power","plants","painting","physics","pirates","pharaoh","poverty","quality","queen","quantum","quiet","quick","question","quest","quilting","queer","recycling","rainfall","religion","reading","royalty","racism","rainforest","research","resilience","relationships","safari","science","shopping","sustainability","sound","summer","snow","school","travel","technology","the ocean","trees","the sea","the beach","trees and plants","textiles","universe","unity","underwater","urban","unique","umbrella","unicorn","usa","ugly","unemployment","vehicles","volcano","vikings","vegetables","vacation","vision","violence","vampires","victory","water","war","winter","weather","wedding","wind","warrior","witchcraft","wine","work","youth","yoga","yellow","young","yarn","youtube","yachts","yes","yogurt","mouse","egypt","poker","parents","skiing","baby","bank","pig","couple"];
+
+function updateStaticView(query) {
+
+  if(query === "") {
+
+    document.title = homepageTitle;
+    qs('#title-wrapper').innerHTML = "<h1 class='title'>Related Words</h1>";
+
+  } else {
+
+    qs("#query").value = query;
+    var queryFormatted = query[0].toUpperCase()+query.toLowerCase().slice(1);
+    qs('#title-wrapper').innerHTML = "<h2 class='title'><span style='display:inline-block;overflow:hidden;width:0;height:0;'>"+queryFormatted+" </span>Related Words</h2>";
+    qs("#clear-search-button").style.display = "block";
+
+  }
+
+}
+
+
+// Prepare item template:
+var templateItem = qs("#result-item-template").cloneNode();
+templateItem.id = "";
+templateItem.style.cssText = "";
+
+
+function updateResultsView(query, terms) {
+
+  if(terms.error || terms.length === 0) {
+
+    console.error("Problem with request:", terms.error);
+    if(terms.error === "no_results" || terms.length === 0) {
+      qs("#message").innerHTML = "Sorry, no results for that query :( <br/><img style='margin-top:2rem; max-height:200px; opacity:0.4;' src='/img/find.png' />";
+    } else {
+      qs("#message").innerHTML = "Sorry! Something's wrong with the server :( Please try again soon.";
+    }
+    qs("#message").style.display = "block";
+
+    qs(".term-description-area").style.display = "none";
+
+  } else {
+
+    updateCustomDescription(query, terms);
+
+    var pageTitle = queryToDynamicPageTitle(query, terms);
+    document.title = pageTitle;
+
+    qs(".term-description-area").style.display = "";
+
+    var cleanedQuery = "";
+    cleanedQuery = query.replace("\"","").replace(/ -[^ ]+/g,"");
+    var placeholders = document.querySelectorAll("._word-placeholder_");
+    for(var i = 0; i < placeholders.length; i++) {
+      placeholders[i].innerText = cleanedQuery;
+    }
+
+    // get max score for saturation normalisation:
+    var maxScore = 0;
+    var minScore = Infinity;
+    terms.forEach(function(t) {
+      if(t.score > maxScore) maxScore = t.score;
+      if(t.score < minScore) minScore = t.score;
+    });
+    var scoreRange = maxScore - minScore;
+
+    var docFragment = document.createDocumentFragment();
+
+    terms.forEach(function(t) {
+
+      var item = templateItem.cloneNode();
+      item.innerHTML = escapeHTML(t.word);
+      item.href = "/relatedto/"+encodeURIComponent(t.word);
+      var saturation = Math.max(0, Math.round(((t.score-minScore)/scoreRange)*100)-10);  /* 100 -> 0 */
+      var lightness = 69 + (100-Math.round(((t.score-minScore)/scoreRange)*100))*(21/100); /* 80 -> 90  */
+      item.style.backgroundColor = "hsl(195, "+saturation+"%, "+lightness+"%)";
+
+      //if(!t.definition) t.definition = t.from + "  ---  " + t.score;
+
+      item.addEventListener("click", function(e) {
+
+        console.log(t.score.toFixed(4), t.from);
+
+        destroyAllPopups();
+
+        var dropInstance = new Drop({
+          target: e.target,
+          content: "<div style='text-align:center'><img src='/img/popup_loading.gif' /><br/>Loading definition...</div>",//createDefinitionPopup(t.word, t.definition, t.score),
+          openOn: 'always',
+          classes: "drop-theme-arrows-bounce-dark",
+          remove: true, //causes it to be removed from DOM when it is closed, then added agaain when it is opened
+          tetherOptions: {
+            attachment: 'top center',
+            targetAttachment: 'bottom center',
+            constraints: [
+              {
+                to: 'scrollParent',
+                pin:true
+              }
+            ]
+          },
+        });
+        dropInstance.open();
+        popupInstances.push(dropInstance);
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        loadDefinition(t.word, function(error, definition) {
+          if(!dropInstance.content) { return; } //may have been destroyed, which is fine
+
+          var html = "";
+
+          html += "<div class='definition-popup'>";
+
+          if(error) { html += "<i>"+error+"</i>"; }
+
+          if(definition) { html += escapeHTML(definition).replace(/\n/g,"<br/>"); }
+          else { html += "<i>Sorry, no definition was found for that term. <a style='color:#45a7ff; text-decoration:underline;' target='_blank' href='https://www.google.com/search?q=define+"+t.word.split(" ").join("+")+"'>Try an internet search.</a></i>"; }
+
+          html += '<div style="text-align:center; margin-top:1rem;"><a class="button definition-popup-button" href="/relatedto/'+encodeURIComponent(t.word)+'">Related Words</a><a class="button definition-popup-button-close" href="#">Close</a></div>';
+
+          dropInstance.content.innerHTML = html;
+
+          dropInstance.position();
+
+          document.querySelector(".definition-popup-button-close").addEventListener("click", function(e) {
+            destroyAllPopups();
+            e.preventDefault();
+          });
+
+        });
+
+      });
+
+      docFragment.appendChild(item);
+
+      // for SEO:
+      var space = document.createTextNode(" ");
+      docFragment.appendChild(space);
+
+    });
+
+    qs("#results-area .words").appendChild(docFragment);
+
+  }
+
+  function loadDefinition(term, callback) {
+    var request = new XMLHttpRequest();
+    request.open('GET', '/api/define?term='+encodeURIComponent(term), true);
+    request.onload = function() {
+      if (request.status >= 200 && request.status < 400) {
+        // Successfully retrieved response from DB
+        callback(null, request.responseText); //error = null
+        return;
+
+      } else {
+        console.error("Reached the serever but something went wrong with the query for word definition.");
+        callback("Sorry, there was a server error while trying to get the definition.", null);
+        return;
+      }
+    };
+    request.onerror = function() {
+      console.error("Connection error while trying to get word definition");
+      callback("Sorry, there was a connection error while trying to get the definition.", null);
+      return;
+    };
+    request.send();
+  }
+
+  qs("#results-area .words").style.height = "auto";
+  ScrollToPlugin.scrollVerticalToElement('.search-area', 20);
+  qs('#query').focus();
+
+  qs("#word-loader-gif").style.display = "none";
+
+
+
+}
+
+
+function updateCustomDescription(query, terms) {
+  if(terms.length < 5) {
+    qs("._top-5-placeholder_").innerText = " It appears that there aren't many of them. Maybe check your spelling, or try adjusting your search query a bit?";
+    return;
+  }
+  var str = " According to the algorithm that drives this word similarity engine, the top 5 related words for \""+query+"\" are: ";
+  str += terms[0].word+", ";
+  str += terms[1].word+", ";
+  str += terms[2].word+", ";
+  str += terms[3].word+", and ";
+  str += terms[4].word+". There are "+(terms.length-5)+" other words that are related to or similar to "+query+" listed above.";
+  qs("._top-5-placeholder_").innerText = str;
+}
+
+function queryToDynamicPageTitle(query, terms) {
+  //Related to fire: flame conflagration aflame [+238 more]
+
+  /*var prefix = "elated to ";
+  var middle = "";
+  var suffix = " - Related Words"
+  if((prefix+query).length > 40) {
+
+    prefix = "Words r"+prefix;
+    middle = query;
+
+  } else {
+
+    prefix = "R"+prefix;
+    suffix = " ["+(terms.length-5)+" more]" + suffix;
+    middle = query + ":";
+
+    var titleLength = (prefix + middle + suffix).length;
+    var i = 0;
+    while(titleLength < 65 && terms[i]) { //add more words to the middle while it's below desired length
+
+      if(terms[i].word.split(" ").length === 1) { // <-- i.e., don't add phrases
+        middle += " "+terms[i].word;
+        titleLength = (prefix + middle + suffix).length;
+      }
+      i++;
+
+    }
+
+  }
+
+  return prefix + middle + suffix;*/
+
+  // fire related words: aflame, inferno, conflagration [200 more]
+
+  var title = "'" + query + "' related words:";
+  var more_text = " [### more]";
+  var titleLength = (title + more_text).length;
+
+  var i = 0;
+  while(titleLength < (65 - more_text.length) && terms[i]) { //add more words to the middle while it's below desired length
+
+    if(terms[i].word.split(" ").length === 1) { // <-- i.e., don't add phrases
+      title += " "+terms[i].word;
+      titleLength = (title + more_text).length;
+    }
+    i++;
+
+  }
+  var more_number = (terms.length - i) < 1000 ? (terms.length - i) : "999+"
+  more_text = " ["+more_number+" more]";
+
+  title = title + more_text;
+
+  return title;
+
+}
+
+
+function escapeHTML(unsafe) {
+  return unsafe
+     .replace(/&/g, "&amp;")
+     .replace(/</g, "&lt;")
+     .replace(/>/g, "&gt;")
+     .replace(/"/g, "&quot;")
+     .replace(/'/g, "&#039;");
+ }
+
+
+function getQueryFromURIPath(path) {
+  var pathParts = path.split("/");
+  pathParts.shift(1);
+
+  if(pathParts[0] === "relatedto") {
+
+    if(pathParts[1] !== undefined) {
+      return window.decodeURIComponent(pathParts[1])
+    } else {
+      return "";
+    }
+
+  } else {
+
+    return "";
+
+  }
+
+}

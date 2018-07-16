@@ -1,0 +1,5 @@
+library(learningr)
+deer_file <- system.file("extdata","RedDeerEndocranialVolume.dlm", package ="learningr")
+deer_data <- read.table(deer_file, header = TRUE, fill = TRUE)
+#str(deer_data,vec.len =2)
+head(deer_data)
